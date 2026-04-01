@@ -5,7 +5,6 @@ const jwt = require('jsonwebtoken');
 
 module.exports = (db, JWT_SECRET) => {
 
-    // RUTA DE SETUP (Solo para crear el primer admin)
     router.post('/setup-admin', async (req, res) => {
         const { username, password, masterKey } = req.body;
 
@@ -17,7 +16,7 @@ module.exports = (db, JWT_SECRET) => {
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(password, salt);
 
-            const sql = "INSERT INTO usuarios (username, password, rol) VALUES (?, ?, 'admin')";
+            const sql = "INSERT INTO usuarios (username, password, rol) VALUES (?, ?, 'super_admin')";
             db.query(sql, [username, hashedPassword], (err, result) => {
                 if (err) return res.status(500).json({ error: err.message });
                 res.json({ mensaje: "Super Admin creado con éxito" });

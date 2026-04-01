@@ -9,11 +9,14 @@ require('dotenv').config();
 const app = express();
 const authRoutes = require('./routes/auth');
 const JWT_SECRET = "mi_llave_secreta_ultra_segura_2026";
+const userRoutes = require('./routes/users');
 
-// --- MIDDLEWARES DE SEGURIDAD ---
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
+const db = mysql.createPool({
+  host: 'localhost',
+  user: 'root',
+  password: '', 
+  database: 'geoproyect'
+});
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
@@ -21,7 +24,13 @@ const loginLimiter = rateLimit({
   message: "Demasiados intentos, intenta de nuevo en 15 minutos"
 });
 
-// --- FUNCIÓN PARA VERIFICAR EL TOKEN (El Alcabala) ---
+// --- MIDDLEWARES DE SEGURIDAD ---
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+app.use('/api/users', userRoutes(db, JWT_SECRET));
+
+// --- FUNCIÓN PARA VERIFICAR EL TOKEN ---
 // La ponemos aquí arriba para que las rutas de abajo puedan usarla
 const verificarToken = (req, res, next) => {
   const header = req.headers['authorization'];
@@ -35,13 +44,6 @@ const verificarToken = (req, res, next) => {
     next(); 
   });
 };
-
-const db = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: '', 
-  database: 'geoproyect'
-});
 
 // Rutas de Auth
 app.use('/api/auth', authRoutes(db, JWT_SECRET));
