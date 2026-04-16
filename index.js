@@ -3,7 +3,7 @@ const cors = require('cors');
 const mysql = require('mysql2');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const jwt = require('jsonwebtoken'); // Asegúrate de tener esta línea
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
@@ -14,23 +14,22 @@ const userRoutes = require('./routes/users');
 const db = mysql.createPool({
   host: 'localhost',
   user: 'root',
-  password: '', 
+  password: '',
   database: 'geoproyect'
 });
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 5, 
+  windowMs: 15 * 60 * 1000,
+  max: 5,
   message: "Demasiados intentos, intenta de nuevo en 15 minutos"
 });
 
-// --- MIDDLEWARES DE SEGURIDAD ---
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use('/api/users', userRoutes(db, JWT_SECRET));
 
-// --- FUNCIÓN PARA VERIFICAR EL TOKEN ---
+// FUNCIÓN PARA VERIFICAR EL TOKEN
 // La ponemos aquí arriba para que las rutas de abajo puedan usarla
 const verificarToken = (req, res, next) => {
   const header = req.headers['authorization'];
@@ -41,20 +40,18 @@ const verificarToken = (req, res, next) => {
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ mensaje: "Token inválido o expirado" });
     req.user = user;
-    next(); 
+    next();
   });
 };
 
 // Rutas de Auth
 app.use('/api/auth', authRoutes(db, JWT_SECRET));
 
-// --- RUTAS PROTEGIDAS CON verificarToken ---
-
 app.get('/', (req, res) => {
   res.send('Servidor de GeoProyect corriendo con éxito 🚀');
 });
 
-// 1. Ahora solo entras aquí si tienes Token
+// Ahora solo entra aquí si tiene Token
 app.get('/api/elementos', verificarToken, (req, res) => {
   const sql = "SELECT * FROM elementos";
   db.query(sql, (err, result) => {
@@ -63,16 +60,25 @@ app.get('/api/elementos', verificarToken, (req, res) => {
   });
 });
 
-// 2. Solo guardas si tienes Token
+// Solo guarda si tiene Token
 app.post('/api/elementos', verificarToken, (req, res) => {
   const { nombre, tipo, estado, region, latitud, longitud, direccion, actividad, tecnologia, cantidad, segmentacion } = req.body;
 
   if (tipo === 'antenas') {
-    const sql = "INSERT INTO elementos (nombre, tipo, estado, region, latitud, longitud, direccion, actividad, tecnologia, cantidad) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    db.query(sql, [nombre, tipo, estado, region, latitud, longitud, direccion, actividad, tecnologia, 1], (err, result) => {
+    const checkAntenaSql = "SELECT id FROM elementos WHERE tipo = 'antenas' AND nombre = ? LIMIT 1";
+    db.query(checkAntenaSql, [nombre], (err, results) => {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ mensaje: "Antena guardada", id: result.insertId });
+      if (results.length > 0) {
+        return res.status(400).json({ mensaje: "Ya existe una antena registrada con ese nombre." });
+      }
+
+      const sql = "INSERT INTO elementos (nombre, tipo, estado, region, latitud, longitud, direccion, actividad, tecnologia, cantidad) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+      db.query(sql, [nombre, tipo, estado, region, latitud, longitud, direccion, actividad, tecnologia, 1], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ mensaje: "Antena guardada", id: result.insertId });
+      });
     });
+
   } else if (tipo === 'abonados') {
     const checkSql = "SELECT id, cantidad, segmentacion FROM elementos WHERE tipo = 'abonados' AND estado = ? LIMIT 1";
     db.query(checkSql, [estado], (err, results) => {
@@ -90,6 +96,7 @@ app.post('/api/elementos', verificarToken, (req, res) => {
         if (segmentacion === '3G') s3 += cantNueva;
         if (segmentacion === '4G') s4 += cantNueva;
         if (segmentacion === '5G') s5 += cantNueva;
+
         const nuevaSegString = `3G:${s3} | 4G:${s4} | 5G:${s5}`;
         const nuevaCantidadTotal = s3 + s4 + s5;
         const updateSql = "UPDATE elementos SET cantidad = ?, segmentacion = ? WHERE id = ?";
@@ -97,6 +104,7 @@ app.post('/api/elementos', verificarToken, (req, res) => {
           if (err) return res.status(500).json({ error: err.message });
           res.json({ mensaje: "Abonados actualizados" });
         });
+
       } else {
         let s3 = (segmentacion === '3G') ? cantidad : 0;
         let s4 = (segmentacion === '4G') ? cantidad : 0;
@@ -109,6 +117,23 @@ app.post('/api/elementos', verificarToken, (req, res) => {
         });
       }
     });
+
+  } else if (tipo === 'agentes') {
+    const { codigoDealer, clasificacion } = req.body;
+    const checkAgenteSql = "SELECT id FROM elementos WHERE tipo = 'agentes' AND codigo_dealer = ? LIMIT 1";
+    db.query(checkAgenteSql, [codigoDealer], (err, results) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (results.length > 0) {
+        return res.status(400).json({ mensaje: "Este Código Dealer ya se encuentra registrado." });
+      }
+
+      const sql = "INSERT INTO elementos (nombre, tipo, estado, region, latitud, longitud, direccion, codigo_dealer, clasificacion, cantidad) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+      db.query(sql, [nombre, tipo, estado, region, latitud, longitud, direccion, codigoDealer || null, clasificacion || null, 1], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ mensaje: "Agente Autorizado guardado", id: result.insertId });
+      });
+    });
+
   } else {
     const checkSql = "SELECT id, cantidad FROM elementos WHERE tipo = ? AND estado = ? LIMIT 1";
     db.query(checkSql, [tipo, estado], (err, results) => {
@@ -120,6 +145,7 @@ app.post('/api/elementos', verificarToken, (req, res) => {
           if (err) return res.status(500).json({ error: err.message });
           res.json({ mensaje: "Cantidad actualizada" });
         });
+
       } else {
         const insertSql = "INSERT INTO elementos (nombre, tipo, estado, region, latitud, longitud, direccion, cantidad) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         db.query(insertSql, [nombre, tipo, estado, region, latitud, longitud, direccion, cantidad], (err, result) => {
@@ -142,37 +168,37 @@ const xlsx = require('xlsx');
 
 // Función para mapear Estado -> Región 
 const obtenerRegion = (estado) => {
-    const mapeo = {
-        'Zulia': 'Zuliana',
-        'Distrito Capital': 'Capital', 'Miranda': 'Capital', 'La Guaira': 'Capital',
-        'Carabobo': 'Central', 'Aragua': 'Central', 'Cojedes': 'Central',
-        'Bolívar': 'Guayana', 'Amazonas': 'Guayana', 'Delta Amacuro': 'Guayana',
-        'Lara': 'Centro Occidental', 'Falcón': 'Centro Occidental', 'Yaracuy': 'Centro Occidental', 'Portuguesa': 'Centro Occidental',
-        'Guárico': 'Los Llanos', 'Apure': 'Los Llanos',
-        'Anzoátegui': 'Nororiental', 'Monagas': 'Nororiental', 'Sucre': 'Nororiental',
-        'Mérida': 'Los Andes', 'Táchira': 'Los Andes', 'Trujillo': 'Los Andes', 'Barinas': 'Los Andes',
-        'Nueva Esparta': 'Insular'
-    };
-    return mapeo[estado] || 'Desconocida';
+  const mapeo = {
+    'Zulia': 'Zuliana',
+    'Distrito Capital': 'Capital', 'Miranda': 'Capital', 'La Guaira': 'Capital',
+    'Carabobo': 'Central', 'Aragua': 'Central', 'Cojedes': 'Central',
+    'Bolívar': 'Guayana', 'Amazonas': 'Guayana', 'Delta Amacuro': 'Guayana',
+    'Lara': 'Centro Occidental', 'Falcón': 'Centro Occidental', 'Yaracuy': 'Centro Occidental', 'Portuguesa': 'Centro Occidental',
+    'Guárico': 'Los Llanos', 'Apure': 'Los Llanos',
+    'Anzoátegui': 'Nororiental', 'Monagas': 'Nororiental', 'Sucre': 'Nororiental',
+    'Mérida': 'Los Andes', 'Táchira': 'Los Andes', 'Trujillo': 'Los Andes', 'Barinas': 'Los Andes',
+    'Nueva Esparta': 'Insular'
+  };
+  return mapeo[estado] || 'Desconocida';
 };
 
 app.post('/api/importar-masivo', (req, res) => {
-    try {
-        // Lee el archivo 
-        const workbook = xlsx.readFile('data_recibida.xlsx'); 
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const filas = xlsx.utils.sheet_to_json(sheet);
+  try {
+    // Lee el archivo 
+    const workbook = xlsx.readFile('data_recibida.xlsx');
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const filas = xlsx.utils.sheet_to_json(sheet);
 
-        // Procesar e insertar
-        filas.forEach(fila => {
-            const region = obtenerRegion(fila.estado);
-            const sql = "INSERT INTO elementos (nombre, tipo, estado, region, latitud, longitud, direccion) VALUES (?, ?, ?, ?, ?, ?, ?)";
-            
-            db.query(sql, [fila.nombre, fila.tipo, fila.estado, region, fila.latitud, fila.longitud, fila.direccion]);
-        });
+    // Procesar e insertar
+    filas.forEach(fila => {
+      const region = obtenerRegion(fila.estado);
+      const sql = "INSERT INTO elementos (nombre, tipo, estado, region, latitud, longitud, direccion) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
-        res.json({ mensaje: `${filas.length} elementos integrados con éxito` });
-    } catch (error) {
-        res.status(500).json({ error: "Error procesando el archivo" });
-    }
+      db.query(sql, [fila.nombre, fila.tipo, fila.estado, region, fila.latitud, fila.longitud, fila.direccion]);
+    });
+
+    res.json({ mensaje: `${filas.length} elementos integrados con éxito` });
+  } catch (error) {
+    res.status(500).json({ error: "Error procesando el archivo" });
+  }
 });

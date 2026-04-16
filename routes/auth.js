@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 module.exports = (db, JWT_SECRET) => {
 
     router.post('/setup-admin', async (req, res) => {
-        const { username, password, masterKey } = req.body;
+        const { email, password, masterKey } = req.body;
 
         if (masterKey !== "Sirelis30") {
             return res.status(403).json({ mensaje: "MasterKey incorrecta" });
@@ -16,8 +16,8 @@ module.exports = (db, JWT_SECRET) => {
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(password, salt);
 
-            const sql = "INSERT INTO usuarios (username, primer_nombre, primer_apellido, email, password) VALUES (?, ?, 'Admin', ?, ?)";
-            db.query(sql, [username, username, username, hashedPassword], (err, result) => {
+            const sql = "INSERT INTO usuarios (email, primer_nombre, primer_apellido, password, activo) VALUES (?, 'Super', 'Admin', ?, 1)";
+            db.query(sql, [email, hashedPassword], (err, result) => {
                 if (err) return res.status(500).json({ error: err.message });
 
                 // Asignar rol super_admin automáticamente
@@ -35,8 +35,8 @@ module.exports = (db, JWT_SECRET) => {
 
     // RUTA DE LOGIN (Corregida y con Logs)
     router.post('/login', (req, res) => {
-        const { username, password } = req.body;
-        console.log("--> Intento de login para:", username);
+        const { email, password } = req.body;
+        console.log("--> Intento de login para:", email);
 
         // Buscamos al usuario y sus roles concatenados
         const sql = `
@@ -44,10 +44,10 @@ module.exports = (db, JWT_SECRET) => {
             FROM usuarios u
             LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
             LEFT JOIN roles r ON ur.rol_id = r.id
-            WHERE u.email = ?
+            WHERE u.email = ? AND u.activo = 1
             GROUP BY u.id`;
 
-        db.query(sql, [username], async (err, results) => {
+        db.query(sql, [email], async (err, results) => {
             if (err) return res.status(500).json({ error: err.message });
 
             if (results.length === 0) {
