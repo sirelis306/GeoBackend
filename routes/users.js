@@ -52,11 +52,11 @@ module.exports = (db, JWT_SECRET) => {
                 u.primer_apellido AS primerApellido, 
                 u.email,
                 u.activo,
+                u.cargo,
                 GROUP_CONCAT(r.nombre_rol) as lista_roles
             FROM usuarios u
             LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
             LEFT JOIN roles r ON ur.rol_id = r.id
-            WHERE u.activo = 1
             GROUP BY u.id
         `;
         db.query(sql, (err, result) => {
