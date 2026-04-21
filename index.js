@@ -30,7 +30,6 @@ app.use(express.json());
 app.use('/api/users', userRoutes(db, JWT_SECRET));
 
 // FUNCIÓN PARA VERIFICAR EL TOKEN
-// La ponemos aquí arriba para que las rutas de abajo puedan usarla
 const verificarToken = (req, res, next) => {
   const header = req.headers['authorization'];
   const token = header && header.split(' ')[1];
@@ -54,6 +53,27 @@ app.get('/', (req, res) => {
 // Ahora solo entra aquí si tiene Token
 app.get('/api/elementos', verificarToken, (req, res) => {
   const sql = "SELECT * FROM elementos";
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(result);
+  });
+});
+
+// Endpoints Estados y Regiones
+app.get('/api/estados', (req, res) => {
+  const sql = `
+    SELECT e.id, e.nombre, e.latitud, e.longitud, r.nombre AS nombre_region, r.color AS color_region
+    FROM estados e
+    LEFT JOIN regiones r ON e.region_id = r.id
+  `;
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(result);
+  });
+});
+
+app.get('/api/regiones', (req, res) => {
+  const sql = "SELECT * FROM regiones";
   db.query(sql, (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(result);
@@ -162,43 +182,30 @@ app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
 
-//Calcula las regiones 
-
+// XLS Import logic
 const xlsx = require('xlsx');
 
-// Función para mapear Estado -> Región 
-const obtenerRegion = (estado) => {
-  const mapeo = {
-    'Zulia': 'Zuliana',
-    'Distrito Capital': 'Capital', 'Miranda': 'Capital', 'La Guaira': 'Capital',
-    'Carabobo': 'Central', 'Aragua': 'Central', 'Cojedes': 'Central',
-    'Bolívar': 'Guayana', 'Amazonas': 'Guayana', 'Delta Amacuro': 'Guayana',
-    'Lara': 'Centro Occidental', 'Falcón': 'Centro Occidental', 'Yaracuy': 'Centro Occidental', 'Portuguesa': 'Centro Occidental',
-    'Guárico': 'Los Llanos', 'Apure': 'Los Llanos',
-    'Anzoátegui': 'Nororiental', 'Monagas': 'Nororiental', 'Sucre': 'Nororiental',
-    'Mérida': 'Los Andes', 'Táchira': 'Los Andes', 'Trujillo': 'Los Andes', 'Barinas': 'Los Andes',
-    'Nueva Esparta': 'Insular'
-  };
-  return mapeo[estado] || 'Desconocida';
-};
-
-app.post('/api/importar-masivo', (req, res) => {
+app.post('/api/importar-masivo', async (req, res) => {
   try {
-    // Lee el archivo 
     const workbook = xlsx.readFile('data_recibida.xlsx');
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const filas = xlsx.utils.sheet_to_json(sheet);
 
-    // Procesar e insertar
-    filas.forEach(fila => {
-      const region = obtenerRegion(fila.estado);
-      const sql = "INSERT INTO elementos (nombre, tipo, estado, region, latitud, longitud, direccion) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    // Obtener mapeo de regiones desde la DB para evitar consultas en bucle
+    const [estadosDb] = await db.promise().query("SELECT e.nombre, r.nombre as region FROM estados e LEFT JOIN regiones r ON e.region_id = r.id");
+    const mapeoRegiones = {};
+    estadosDb.forEach(est => mapeoRegiones[est.nombre] = est.region);
 
-      db.query(sql, [fila.nombre, fila.tipo, fila.estado, region, fila.latitud, fila.longitud, fila.direccion]);
-    });
+    // Procesar e insertar
+    for (const fila of filas) {
+      const region = mapeoRegiones[fila.estado] || 'Desconocida';
+      const sql = "INSERT INTO elementos (nombre, tipo, estado, region, latitud, longitud, direccion) VALUES (?, ?, ?, ?, ?, ?, ?)";
+      await db.promise().query(sql, [fila.nombre, fila.tipo, fila.estado, region, fila.latitud, fila.longitud, fila.direccion]);
+    }
 
     res.json({ mensaje: `${filas.length} elementos integrados con éxito` });
   } catch (error) {
+    console.error("Error en importación masiva:", error);
     res.status(500).json({ error: "Error procesando el archivo" });
   }
 });
