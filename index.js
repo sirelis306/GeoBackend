@@ -52,7 +52,15 @@ app.get('/', (req, res) => {
 
 // Ahora solo entra aquí si tiene Token
 app.get('/api/elementos', verificarToken, (req, res) => {
-  const sql = "SELECT * FROM elementos";
+  const sql = `
+    SELECT 
+      el.*, 
+      est.nombre AS estado, 
+      reg.nombre AS region 
+    FROM elementos el
+    LEFT JOIN estados est ON el.estado_id = est.id
+    LEFT JOIN regiones reg ON est.region_id = reg.id
+  `;
   db.query(sql, (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(result);
@@ -62,7 +70,14 @@ app.get('/api/elementos', verificarToken, (req, res) => {
 // Endpoints Estados y Regiones
 app.get('/api/estados', (req, res) => {
   const sql = `
-    SELECT e.id, e.nombre, e.latitud, e.longitud, r.nombre AS nombre_region, r.color AS color_region
+    SELECT 
+      e.id, 
+      e.nombre, 
+      e.latitud, 
+      e.longitud, 
+      e.color AS color_estado, 
+      r.nombre AS nombre_region, 
+      r.color AS color_region
     FROM estados e
     LEFT JOIN regiones r ON e.region_id = r.id
   `;
