@@ -182,6 +182,109 @@ module.exports = (db, JWT_SECRET) => {
             res.status(500).json({ error: err.message });
         }
     });
+    
+    // Obtiene un usuario específico
+    router.get('/obtener/:id', verificarToken, async (req, res) => {
+        try {
+            const { id } = req.params;
+            const sql = `
+                SELECT 
+                    u.*, 
+                    GROUP_CONCAT(r.nombre_rol) as lista_roles
+                FROM usuarios u
+                LEFT JOIN usuario_roles ur ON u.id = ur.usuario_id
+                LEFT JOIN roles r ON ur.rol_id = r.id
+                WHERE u.id = ?
+                GROUP BY u.id
+            `;
+            const [rows] = await db.promise().query(sql, [id]);
+            if (rows.length === 0) return res.status(404).json({ mensaje: "Usuario no encontrado" });
+            
+            const user = rows[0];
+            const rolesArr = user.lista_roles ? user.lista_roles.split(',') : [];
+            user.roles = {
+                rol_super_administrador: rolesArr.includes('rol_super_administrador'),
+                rol_administrador: rolesArr.includes('rol_administrador'),
+                rol_analista: rolesArr.includes('rol_analista'),
+                rol_regular: rolesArr.includes('rol_regular')
+            };
+            
+            // Limpiar password y otros campos sensibles si fuera necesario
+            delete user.password;
+            
+            // Renombrar campos y manejar nulos
+            res.json({
+                ...user,
+                primerNombre: user.primer_nombre || '',
+                segundoNombre: user.segundo_nombre || '',
+                primerApellido: user.primer_apellido || '',
+                segundoApellido: user.segundo_apellido || '',
+                tipoDocumento: user.tipo_documento || null,
+                documento: user.documento || '',
+                fechaNacimiento: user.fecha_nacimiento ? new Date(user.fecha_nacimiento).toISOString().split('T')[0] : '',
+                pais: user.pais || null,
+                estado: user.estado || null,
+                ciudad: user.ciudad || null,
+                sexo: user.sexo || null,
+                cargo: user.cargo || null,
+                email: user.email || ''
+            });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Actualiza un usuario
+    router.put('/actualizar/:id', verificarToken, async (req, res) => {
+        try {
+            const { id } = req.params;
+            const u = req.body;
+            const editorId = req.user.id;
+
+            const rolesEditor = await obtenerRolUsuario(editorId);
+            const esSuperAdmin = rolesEditor.includes('rol_super_administrador');
+            const esAdmin = rolesEditor.includes('rol_administrador');
+
+            if (!esSuperAdmin && !esAdmin) {
+                return res.status(403).json({ mensaje: "No tienes permiso para editar usuarios" });
+            }
+
+            const sqlUpdate = `
+                UPDATE usuarios SET 
+                    primer_nombre = ?, segundo_nombre = ?, primer_apellido = ?, segundo_apellido = ?,
+                    tipo_documento = ?, documento = ?, fecha_nacimiento = ?, pais = ?, estado = ?, 
+                    ciudad = ?, direccion = ?, sexo = ?, email = ?, cargo = ?
+                WHERE id = ?
+            `;
+            const values = [
+                u.primerNombre, u.segundoNombre, u.primerApellido, u.segundoApellido,
+                u.tipoDocumento, u.documento, u.fechaNacimiento, u.pais, u.estado,
+                u.ciudad, u.direccion, u.sexo, u.email, u.cargo, id
+            ];
+
+            await db.promise().query(sqlUpdate, values);
+
+            // Actualizar roles
+            await db.promise().query('DELETE FROM usuario_roles WHERE usuario_id = ?', [id]);
+            const rolesSeleccionados = [];
+            if (u.roles.rol_super_administrador) rolesSeleccionados.push('rol_super_administrador');
+            if (u.roles.rol_administrador) rolesSeleccionados.push('rol_administrador');
+            if (u.roles.rol_analista) rolesSeleccionados.push('rol_analista');
+            if (u.roles.rol_regular) rolesSeleccionados.push('rol_regular');
+
+            if (rolesSeleccionados.length > 0) {
+                const [rolesData] = await db.promise().query(
+                    'SELECT id FROM roles WHERE nombre_rol IN (?)', [rolesSeleccionados]
+                );
+                const inserts = rolesData.map(r => [id, r.id]);
+                await db.promise().query('INSERT INTO usuario_roles (usuario_id, rol_id) VALUES ?', [inserts]);
+            }
+
+            res.json({ mensaje: "Usuario actualizado con éxito" });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
 
     return router;
 };
