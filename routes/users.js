@@ -43,6 +43,15 @@ module.exports = (db, JWT_SECRET) => {
         return pass;
     };
 
+    // Obtiene todos los roles disponibles
+    router.get('/roles', verificarToken, (req, res) => {
+        const sql = 'SELECT id, nombre_rol FROM roles';
+        db.query(sql, (err, result) => {
+            if (err) return res.status(500).json(err);
+            res.json(result);
+        });
+    });
+
     // Solo usuarios activos
     router.get('/listado', verificarToken, (req, res) => {
         const sql = `
