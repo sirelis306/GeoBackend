@@ -27,7 +27,7 @@ const loginLimiter = rateLimit({
 
 app.use(helmet());
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGIN || '*'
+  origin: '*'
 }));
 app.use(express.json());
 
@@ -114,7 +114,7 @@ app.post('/api/elementos', verificarToken, async (req, res) => {
     }
     
     const estado_id = states[0].id;
-    const tecnologiaStr = Array.isArray(tecnologia) ? tecnologia.join(', ') : tecnologia;
+    const tecnologiaStr = Array.isArray(tecnologia) ? tecnologia.join(' / ') : tecnologia;
 
     if (tipo === 'antenas') {
       const checkAntenaSql = "SELECT id FROM elementos WHERE tipo = 'antenas' AND nombre = ? LIMIT 1";
@@ -199,6 +199,20 @@ app.post('/api/elementos', verificarToken, async (req, res) => {
   }
 });
 
+// Endpoint para actualización rápida de coordenadas (Geocodificador de reparación)
+app.put('/api/elementos/:id/coordenadas', verificarToken, async (req, res) => {
+  const { id } = req.params;
+  const { latitud, longitud } = req.body;
+
+  try {
+    const sql = "UPDATE elementos SET latitud = ?, longitud = ? WHERE id = ?";
+    await db.promise().query(sql, [latitud, longitud, id]);
+    res.json({ mensaje: "Coordenadas actualizadas con éxito" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -228,8 +242,28 @@ app.post('/api/importar-masivo', async (req, res) => {
         continue;
       }
 
-      const sql = "INSERT INTO elementos (nombre, tipo, estado_id, latitud, longitud, direccion) VALUES (?, ?, ?, ?, ?, ?)";
-      await db.promise().query(sql, [fila.nombre, fila.tipo, estado_id, fila.latitud, fila.longitud, fila.direccion]);
+      const sql = `
+        INSERT INTO elementos 
+          (nombre, tipo, estado_id, latitud, longitud, direccion, actividad, tecnologia, cantidad, segmentacion, codigo_dealer, clasificacion) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+      
+      const values = [
+        fila.nombre, 
+        fila.tipo || 'antenas', 
+        estado_id, 
+        fila.latitud || 0, 
+        fila.longitud || 0, 
+        fila.direccion || '',
+        fila.actividad || 'Operativa',
+        fila.tecnologia || '/ / /',
+        fila.cantidad || 1,
+        fila.segmentacion || null,
+        fila.codigo_dealer || fila.codigoDealer || null,
+        fila.clasificacion || null
+      ];
+
+      await db.promise().query(sql, values);
     }
 
     res.json({ mensaje: `${filas.length} elementos integrados con éxito` });
