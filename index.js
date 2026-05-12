@@ -213,6 +213,37 @@ app.put('/api/elementos/:id/coordenadas', verificarToken, async (req, res) => {
   }
 });
 
+// Proxy de Geocodificación para evitar CORS y manejar la política de Nominatim desde el servidor
+const https = require('https');
+app.get('/api/geocode', (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ error: "Query 'q' es requerido" });
+
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&email=admin@geoproyect.com`;
+  
+  const options = {
+    headers: {
+      'User-Agent': 'GeoProyect-App/1.0 (admin@geoproyect.com)'
+    }
+  };
+
+  https.get(url, options, (apiRes) => {
+    let data = '';
+    apiRes.on('data', (chunk) => { data += chunk; });
+    apiRes.on('end', () => {
+      try {
+        const jsonData = JSON.parse(data);
+        res.json(jsonData);
+      } catch (e) {
+        res.status(500).json({ error: "Error parseando respuesta de Nominatim" });
+      }
+    });
+  }).on('error', (err) => {
+    console.error("Error en Proxy Geocode:", err.message);
+    res.status(500).json({ error: err.message });
+  });
+});
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
