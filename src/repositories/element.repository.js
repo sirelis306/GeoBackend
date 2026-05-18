@@ -10,6 +10,7 @@ class ElementRepository {
       FROM elementos el
       LEFT JOIN estados est ON el.estado_id = est.id
       LEFT JOIN regiones reg ON est.region_id = reg.id
+      WHERE el.activo = 1
     `;
     const [rows] = await db.promise().query(sql);
     return rows;
@@ -21,10 +22,11 @@ class ElementRepository {
         el.tipo,
         est.nombre AS estado,
         reg.nombre AS region,
-        SUM(el.cantidad) as total
+        SUM(el.activo * el.cantidad) as total
       FROM elementos el
       LEFT JOIN estados est ON el.estado_id = est.id
       LEFT JOIN regiones reg ON est.region_id = reg.id
+      WHERE el.activo = 1
       GROUP BY el.tipo, est.nombre, reg.nombre
     `;
     const [rows] = await db.promise().query(sql);
@@ -38,25 +40,25 @@ class ElementRepository {
   }
 
   async findAntenaByName(nombre) {
-    const sql = "SELECT id FROM elementos WHERE tipo = 'antenas' AND nombre = ? LIMIT 1";
+    const sql = "SELECT id FROM elementos WHERE tipo = 'antenas' AND nombre = ? AND activo = 1 LIMIT 1";
     const [rows] = await db.promise().query(sql, [nombre]);
     return rows[0];
   }
 
   async findAbonadoByEstado(estadoId) {
-    const sql = "SELECT id, cantidad, segmentacion FROM elementos WHERE tipo = 'abonados' AND estado_id = ? LIMIT 1";
+    const sql = "SELECT id, cantidad, segmentacion FROM elementos WHERE tipo = 'abonados' AND estado_id = ? AND activo = 1 LIMIT 1";
     const [rows] = await db.promise().query(sql, [estadoId]);
     return rows[0];
   }
 
   async findAgenteByCodigoDealer(codigoDealer) {
-    const sql = "SELECT id FROM elementos WHERE tipo = 'agentes' AND codigo_dealer = ? LIMIT 1";
+    const sql = "SELECT id FROM elementos WHERE tipo = 'agentes' AND codigo_dealer = ? AND activo = 1 LIMIT 1";
     const [rows] = await db.promise().query(sql, [codigoDealer]);
     return rows[0];
   }
 
   async findElementByTypeAndEstado(tipo, estadoId) {
-    const sql = "SELECT id, cantidad FROM elementos WHERE tipo = ? AND estado_id = ? LIMIT 1";
+    const sql = "SELECT id, cantidad FROM elementos WHERE tipo = ? AND estado_id = ? AND activo = 1 LIMIT 1";
     const [rows] = await db.promise().query(sql, [tipo, estadoId]);
     return rows[0];
   }

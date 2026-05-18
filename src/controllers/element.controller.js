@@ -38,6 +38,26 @@ class ElementController {
       res.status(500).json({ error: error.message });
     }
   }
+
+  async update(req, res) {
+    try {
+      const { id } = req.params;
+      await elementService.updateElement(id, req.body);
+      res.json({ mensaje: "Elemento actualizado con éxito" });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  async delete(req, res) {
+    try {
+      const { id } = req.params;
+      await elementService.deleteElement(id);
+      res.json({ mensaje: "Elemento eliminado correctamente" });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 }
 
 module.exports = new ElementController();

@@ -94,6 +94,37 @@ class ElementService {
     }
   }
 
+  async updateElement(id, data) {
+    const toUpdate = {};
+    if (data.nombre !== undefined) toUpdate.nombre = data.nombre;
+    if (data.direccion !== undefined) toUpdate.direccion = data.direccion;
+    if (data.latitud !== undefined) toUpdate.latitud = data.latitud ? Number(data.latitud) : null;
+    if (data.longitud !== undefined) toUpdate.longitud = data.longitud ? Number(data.longitud) : null;
+    if (data.cantidad !== undefined) toUpdate.cantidad = Number(data.cantidad);
+    if (data.actividad !== undefined) toUpdate.actividad = data.actividad;
+    if (data.tecnologia !== undefined) {
+      toUpdate.tecnologia = Array.isArray(data.tecnologia) ? data.tecnologia.join(' / ') : data.tecnologia;
+    }
+    if (data.segmentacion !== undefined) toUpdate.segmentacion = data.segmentacion;
+    if (data.codigoDealer !== undefined || data.codigo_dealer !== undefined) {
+      toUpdate.codigo_dealer = data.codigoDealer || data.codigo_dealer;
+    }
+    if (data.clasificacion !== undefined) toUpdate.clasificacion = data.clasificacion;
+    
+    if (data.estado !== undefined) {
+      const estadoObj = await elementRepository.findEstadoByName(data.estado);
+      if (estadoObj) {
+        toUpdate.estado_id = estadoObj.id;
+      }
+    }
+    
+    await elementRepository.update(id, toUpdate);
+  }
+
+  async deleteElement(id) {
+    await elementRepository.update(id, { activo: 0 });
+  }
+
   async updateCoordinates(id, latitud, longitud) {
     await elementRepository.update(id, { latitud, longitud });
   }
